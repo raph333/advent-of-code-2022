@@ -11,8 +11,10 @@ DIR2AXIS = {
     'L': 'x'
 }
 
+N_KNOTS = 2
 
-class RopeEnd:
+
+class RopeKnot:
 
     def __init__(self, name: str, x: int, y: int):
         self.name = name
@@ -62,48 +64,50 @@ class RopeEnd:
 
     def is_adjacent(self, other_end) -> bool:
         """ Return True if the two ends are on adjacent squares: either vertically, horizontally or diagonally"""
-        assert isinstance(other_end, RopeEnd)
+        assert isinstance(other_end, RopeKnot)
         return abs(self.x - other_end.x) <= 1 and abs(self.y - other_end.y) <= 1
 
     def axis_diff(self, other_end, axis: str):
-        assert isinstance(other_end, RopeEnd)
+        assert isinstance(other_end, RopeKnot)
         return self[axis] - other_end[axis]
 
+    def follow(self, lead, moving_ax: str, static_ax: str, direction: int):
+        assert isinstance(lead, RopeKnot)
+        if not self.is_adjacent(lead):
 
-def move(instruction: str, head: RopeEnd, tail: RopeEnd, verbose=False):
-    direction, steps = instruction.strip().split(' ')
-    steps = int(steps)
-    sign = 1 if direction in ('R', 'U') else - 1
+            # diagonal jump needs to happen first
+            static_axis_diff = lead.axis_diff(self, static_ax)
+            if static_axis_diff != 0:
+                self.move_diagonal({static_ax: static_axis_diff, moving_ax: direction})
 
-    moving_axis = DIR2AXIS[direction]
-    static_axis = 'x' if moving_axis == 'y' else 'y'
+            # move along the direction that the head moved
+            tail_axis_target = lead[moving_ax] - direction
+            tail_steps = abs(tail_axis_target - self[moving_ax])
 
-    head.move_axis(moving_axis, steps, direction=sign)
-
-    if not tail.is_adjacent(head):
-
-        # diagonal jump needs to happen first
-        static_axis_diff = head.axis_diff(tail, static_axis)
-        if static_axis_diff != 0:
-            tail.move_diagonal({static_axis: static_axis_diff, moving_axis: sign})
-
-        # move along the direction that the head moved
-        tail_axis_target = head[moving_axis] - sign
-        tail_steps = abs(tail_axis_target - tail[moving_axis])
-
-        tail.move_axis(moving_axis, tail_steps, direction=sign)
-
-        print(f'{instruction}\n{head}\n{tail}\n')
+            self.move_axis(moving_ax, tail_steps, direction=direction)
 
 
 if __name__ == '__main__':
     with open(get_file_path(9, 'rope.text')) as infile:
         lines = infile.readlines()
 
-    head_end = RopeEnd('Head', 0, 0)
-    tail_end = RopeEnd('Tail', 0, 0)
+    knots = []
+    for n in range(N_KNOTS):
+        knots.append(RopeKnot(f'Knot_{n}', 0, 0))
+
+    head_end, tail_end = knots
 
     for line in lines:
-        move(line, head_end, tail_end, verbose=True)
+        direction, steps = line.strip().split(' ')
+        steps = int(steps)
+        sign = 1 if direction in ('R', 'U') else - 1
+
+        moving_axis = DIR2AXIS[direction]
+        static_axis = 'x' if moving_axis == 'y' else 'y'
+
+        head_end.move_axis(moving_axis, steps, direction=sign)
+        tail_end.follow(head_end, moving_axis, static_axis, sign)
+
+        print(f'{line}\n{head_end}\n{tail_end}\n')
 
     print(f'Number of unique locations visited: {tail_end.get_num_visited_locations()}')
