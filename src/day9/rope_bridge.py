@@ -1,6 +1,5 @@
-from utils.utils import get_file_path
-
 from collections import namedtuple
+from utils.utils import get_file_path
 
 Point = namedtuple('Point', ['x', 'y'])
 
@@ -10,8 +9,12 @@ DIR2AXIS = {
     'R': 'x',
     'L': 'x'
 }
-
-N_KNOTS = 2
+DIR2SIGN = {
+    'D': -1,
+    'U': 1,
+    'R': 1,
+    'L': -1
+}
 
 
 class RopeKnot:
@@ -36,30 +39,15 @@ class RopeKnot:
     def log_position(self):
         self.route.append(self.get_position())
 
-    def get_num_visited_locations(self) -> int:
-        return len(set(self.route))
-
-    def move_axis(self, axis: str, n: int, direction: int):
-        if axis == 'x':
-            self.move_x(n, direction)
-        else:
-            self.move_y(n, direction)
-
-    def move_x(self, n: int, sign):
-        for _ in range(n):
-            self.x += sign
-            self.log_position()
-
-    def move_y(self, n, sign):
-        for _ in range(n):
-            self.y += sign
-            self.log_position()
-
-    def move_diagonal(self, axis2step: dict[str, int]):
-        assert set(axis2step.keys()) == {'x', 'y'}
-        assert set(axis2step.values()).issubset({-1, 1})
-        self.x += axis2step['x']
-        self.y += axis2step['y']
+    def move(self, x: int = 0, y: int = 0):
+        """
+        Move one field horizontally, vertically or diagonally.
+        """
+        assert x != 0 or y != 0
+        assert -1 <= x <= 1
+        assert -1 <= y <= 1
+        self.x += x
+        self.y += y
         self.log_position()
 
     def is_adjacent(self, other_end) -> bool:
@@ -67,47 +55,67 @@ class RopeKnot:
         assert isinstance(other_end, RopeKnot)
         return abs(self.x - other_end.x) <= 1 and abs(self.y - other_end.y) <= 1
 
-    def axis_diff(self, other_end, axis: str):
-        assert isinstance(other_end, RopeKnot)
-        return self[axis] - other_end[axis]
+    @staticmethod
+    def _sign(number: int) -> int:
+        return 1 if number > 0 else -1 if number < 0 else 0
 
-    def follow(self, lead, moving_ax: str, static_ax: str, direction: int):
+    def follow(self, lead):
+        """
+        Follow the lead-node that just moved.
+        Assumption:
+        1) The two knots where adjacent before the lead knot moved
+        2) The lead knot can holy have moved one filed
+        These assumptions are ensured by:
+        * The method "move" only allowing a knot to move one field at a time.
+        * Each time, knot k moves, the knot k + 1 executes this method
+        * If the distance is larger than expected, this method throws an assertion-error
+        """
         assert isinstance(lead, RopeKnot)
-        if not self.is_adjacent(lead):
 
-            # diagonal jump needs to happen first
-            static_axis_diff = lead.axis_diff(self, static_ax)
-            if static_axis_diff != 0:
-                self.move_diagonal({static_ax: static_axis_diff, moving_ax: direction})
+        if self.is_adjacent(lead):
+            return
 
-            # move along the direction that the head moved
-            tail_axis_target = lead[moving_ax] - direction
-            tail_steps = abs(tail_axis_target - self[moving_ax])
+        x_diff = lead.x - self.x
+        y_diff = lead.y - self.y
+        x_direction = self._sign(x_diff)
+        y_direction = self._sign(y_diff)
+        axis_distances = {abs(x_diff), abs(y_diff)}
 
-            self.move_axis(moving_ax, tail_steps, direction=direction)
+        if axis_distances == {1, 2} or axis_distances == {2}:
+            self.move(x=x_direction, y=y_direction)
+            return
+
+        if axis_distances == {0, 2}:
+            self.move(x=x_direction, y=y_direction)
+            return
+
+        raise AssertionError(f'Unexpected difference to lead: {lead} - {self}')
+
+
+def get_num_unique_visited_locations(instructions: list[str], rope_length: int) -> int:
+    knots = []
+    for n in range(0, rope_length):
+        knots.append(RopeKnot(f'Knot_{n}', 0, 0))
+
+    for instruction in instructions:
+        direction, steps = instruction.strip().split(' ')
+        steps = int(steps)
+        moving_axis = DIR2AXIS[direction]
+        sign = DIR2SIGN[direction]
+
+        for _ in range(steps):
+            knots[0].move(**{moving_axis: sign})
+
+            for n in range(1, rope_length):
+                knots[n].follow(knots[n - 1])
+
+    return len(set(knots[-1].route))
 
 
 if __name__ == '__main__':
     with open(get_file_path(9, 'rope.text')) as infile:
         lines = infile.readlines()
 
-    knots = []
-    for n in range(N_KNOTS):
-        knots.append(RopeKnot(f'Knot_{n}', 0, 0))
-
-    head_end, tail_end = knots
-
-    for line in lines:
-        direction, steps = line.strip().split(' ')
-        steps = int(steps)
-        sign = 1 if direction in ('R', 'U') else - 1
-
-        moving_axis = DIR2AXIS[direction]
-        static_axis = 'x' if moving_axis == 'y' else 'y'
-
-        head_end.move_axis(moving_axis, steps, direction=sign)
-        tail_end.follow(head_end, moving_axis, static_axis, sign)
-
-        print(f'{line}\n{head_end}\n{tail_end}\n')
-
-    print(f'Number of unique locations visited: {tail_end.get_num_visited_locations()}')
+    for length in (2, 10):
+        print(f'Number of unique locations visited with rope-length {length}: '
+              f'{get_num_unique_visited_locations(lines, length)}')
