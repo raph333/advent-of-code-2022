@@ -3,21 +3,8 @@ from utils.utils import get_file_path
 
 Point = namedtuple('Point', ['x', 'y'])
 
-DIR2AXIS = {
-    'D': 'y',
-    'U': 'y',
-    'R': 'x',
-    'L': 'x'
-}
-DIR2SIGN = {
-    'D': -1,
-    'U': 1,
-    'R': 1,
-    'L': -1
-}
 
-
-class RopeKnot:
+class Knot:
 
     def __init__(self, name: str, x: int, y: int):
         self.name = name
@@ -52,7 +39,7 @@ class RopeKnot:
 
     def is_adjacent(self, other_end) -> bool:
         """ Return True if the two ends are on adjacent squares: either vertically, horizontally or diagonally"""
-        assert isinstance(other_end, RopeKnot)
+        assert isinstance(other_end, Knot)
         return abs(self.x - other_end.x) <= 1 and abs(self.y - other_end.y) <= 1
 
     @staticmethod
@@ -70,7 +57,7 @@ class RopeKnot:
         * Each time, knot k moves, the knot k + 1 executes this method
         * If the distance is larger than expected, this method throws an assertion-error
         """
-        assert isinstance(lead, RopeKnot)
+        assert isinstance(lead, Knot)
 
         if self.is_adjacent(lead):
             return
@@ -92,30 +79,55 @@ class RopeKnot:
         raise AssertionError(f'Unexpected difference to lead: {lead} - {self}')
 
 
-def get_num_unique_visited_locations(instructions: list[str], rope_length: int) -> int:
-    knots = []
-    for n in range(0, rope_length):
-        knots.append(RopeKnot(f'Knot_{n}', 0, 0))
+class MoveInstruction:
+    dir2axis = {
+        'D': 'y',
+        'U': 'y',
+        'R': 'x',
+        'L': 'x'
+    }
+    dir2sign = {
+        'D': -1,
+        'U': 1,
+        'R': 1,
+        'L': -1
+    }
 
-    for instruction in instructions:
-        direction, steps = instruction.strip().split(' ')
-        steps = int(steps)
-        moving_axis = DIR2AXIS[direction]
-        sign = DIR2SIGN[direction]
+    def __init__(self, line: str):
+        direction, steps = line.strip().split(' ')
+        self.direction = direction
+        self.steps = int(steps)
+        self.moving_axis = self.dir2axis[direction]
+        self.sign = self.dir2sign[direction]
 
-        for _ in range(steps):
-            knots[0].move(**{moving_axis: sign})
 
-            for n in range(1, rope_length):
-                knots[n].follow(knots[n - 1])
+class Rope:
 
-    return len(set(knots[-1].route))
+    def __init__(self, length: int):
+        self.length = length
+        self.knots = [Knot(f'Knot_{i}', 0, 0) for i in range(length)]
+
+    def move(self, instruction: MoveInstruction):
+        for _ in range(instruction.steps):
+            self.knots[0].move(**{instruction.moving_axis: instruction.sign})
+
+            for n in range(1, self.length):
+                self.knots[n].follow(self.knots[n - 1])
+
+    def get_num_unique_visited_locations(self, instruction_lines: list[str], knot_num: int = -1) -> int:
+        for line in instruction_lines:
+            instruction = MoveInstruction(line)
+            self.move(instruction)
+
+        return len(set(self.knots[knot_num].route))
 
 
 if __name__ == '__main__':
     with open(get_file_path(9, 'rope.text')) as infile:
         lines = infile.readlines()
 
-    for length in (2, 10):
-        print(f'Number of unique locations visited with rope-length {length}: '
-              f'{get_num_unique_visited_locations(lines, length)}')
+    ROPE_LENGTHS = (2, 10)  # rope-lengths for part1 and part2, respectively
+
+    for rope_length in ROPE_LENGTHS:
+        print(f'Number of unique locations visited with rope-length {rope_length}: '
+              f'{Rope(rope_length).get_num_unique_visited_locations(lines)}')
